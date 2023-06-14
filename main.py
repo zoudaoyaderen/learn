@@ -171,8 +171,9 @@ def BinarySearch(nums, num):
 
 nums = list(range(0, 10, 2))
 
-print(nums)
-print(BinarySearch(nums, 5))
+
+# print(nums)
+# print(BinarySearch(nums, 5))
 
 
 def edit_distance(word1, word2):
@@ -271,7 +272,9 @@ nums = np.random.randint(0, 20, (10,)).tolist()
 # print(MergeSort(nums))
 
 nums = np.random.randint(0, 100, (10,)).tolist()
-print(nums)
+
+
+# print(nums)
 
 
 def Heapify(start, end):
@@ -302,12 +305,14 @@ def HeapSort():
         Heapify(0, i - 1)
 
 
-HeapInit()
-HeapSort()
-print(nums)
+# HeapInit()
+# HeapSort()
+# print(nums)
 
 nums = np.random.randint(0, 20, (9,)).tolist()
-print(nums)
+
+
+# print(nums)
 
 
 def quickSelect(nums, k):
@@ -341,8 +346,8 @@ def quickSelect(nums, k):
         return _llist, _mlist, _rlist + mlist + rlist
 
 
-print(sorted(nums))
-print(quickSelect(nums, 4))
+# print(sorted(nums))
+# print(quickSelect(nums, 4))
 
 
 def wiggleSort(nums):
@@ -354,7 +359,7 @@ def wiggleSort(nums):
     return nums
 
 
-print(wiggleSort(nums))
+# print(wiggleSort(nums))
 
 
 def minWindow(self, s: str, t: str) -> str:
@@ -382,6 +387,55 @@ def minWindow(self, s: str, t: str) -> str:
             i += 1
     return '' if res[1] > len(s) else s[res[0]:res[1] + 1]  # 如果res始终没被更新过，代表无满足条件的结果
 
+
+def mySqrt(x):
+    # 牛顿迭代 x1 = 0.5 * (x0 + c / x0)
+    c, x0 = float(x), float(x)
+    while True:
+        x1 = 0.5 * (x0 + c / x0)
+        if abs(x1 - x0) < 1e-5:
+            break
+        x0 = x1
+    return int(x1)
+
+
+# print(mySqrt(99))
+
+def longestPalindrome(s):
+    n = len(s)
+    if n < 2:
+        return s
+
+    dp = np.zeros((n, n))
+    # dp = [[False for _ in range(n)] for _ in range(n)]
+    # dp = [[False] * n] * n # 这么写有 bug ！！！
+    for i in range(n):
+        dp[i][i] = 1
+
+    max_len = 1
+    begin = 0
+    for l in range(2, n + 1):
+        for i in range(n):
+            j = i + l - 1
+            if j >= n:
+                break
+
+            if s[i] == s[j]:
+                if j - i > 1:
+                    dp[i][j] = dp[i + 1][j - 1]
+                else:
+                    dp[i][j] = 1
+            else:
+                dp[i][j] = 0
+            print(dp)
+            if dp[i][j] == 1:
+                max_len = j - i + 1
+                begin = i
+
+    return s[begin:begin + max_len]
+
+
+print(longestPalindrome('saaasgds'))
 
 """
 # self_attention
