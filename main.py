@@ -1,0 +1,886 @@
+import math
+import random
+
+import numpy as np
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.c_attn = nn.Linear(config.n_dim, config.n_dim * 3)
+        self.c_proj = nn.Linear(config.n_dim, config.n_dim)
+        self.attn_drop = nn.Dropout(config.att_pdrop)
+        self.resid_drop = nn.Dropout(config.resid_pdrop)
+        m_len = config.max_len
+        self.register_buffer("bias", torch.tril(torch.ones(m_len, m_len)).view(1, 1, m_len, m_len))
+        self.n_dim = config.n_dim
+        self.n_head = config.n_head
+
+    def forward(self, x):
+        B, T, C = x.shape
+        nh = self.n_head
+        hs = C // nh
+
+        q, k, v = self.c_attn(x).split(C, dim=-1)  # (B, T, C)
+        q = q.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+        k = k.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+        v = v.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+        att = q @ k.transpose(2, 3) * 1.0 / math.sqrt(hs)
+        att = att.masked_fill(self.bias == 0, float("-inf"))
+        att = F.softmax(att)
+        att = self.attn_drop(att)
+
+        y = att @ v
+        y = y.transpose(1, 2).view(B, T, C)
+        y = self.c_proj(y)
+        y = self.resid_drop(y)
+
+        return y
+
+
+class Block(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.ln1 = nn.LayerNorm(config.n_dim)
+        self.attn = CausalSelfAttention(config)
+        self.ln2 = nn.LayerNorm(config.n_dim)
+        self.mlp = nn.ModuleDict(dict(
+            c_fc=nn.Linear(config.n_dim, config.n_dim * 4),
+            act=nn.GELU,
+            c_proj=nn.Linear(config.n_dim * 4, config.n_dim),
+            drop=nn.Dropout(config.resid_pdrop),
+        ))
+        m = self.mlp
+        self.mlpf = lambda x: m.drop(m.c_proj(m.act(m.c_fc(x))))
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x))
+        x = x + self.mlpf(self.ln2(x))
+        return x
+
+
+class GPT(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.max_len = config.max_len
+        self.transformer = nn.ModuleDict(
+            dict(
+                wte=nn.Embedding(config.vocab_size, config.n_dim),
+                wpe=nn.Embedding(self.max_len, config.n_dim),
+                drop=nn.Dropout(config.embd_pdrop),
+                h=nn.ModuleList([Block(config) for _ in config.n_layer]),
+                ln=nn.LayerNorm(config.n_dim),
+            )
+        )
+        self.lm_head = nn.Linear(config.n_dim, config.vocab_size)
+
+    def forward(self, idx, targets):
+        device = idx.device
+        B, T = idx.shape
+        pos = torch.arange(0, self.max_len, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
+        wte = self.transformer.wte(idx)
+        wpe = self.transformer.wpe(pos)
+        x = self.transformer.drop(wte + wpe)
+        for block in self.transformer.h:
+            x = block(x)
+        x = self.transformer.ln(x)
+
+        logits = self.lm_head(x)  # (B, T, V)
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        n_dim = config.n_dim
+        self.c_attn = nn.Linear(n_dim, n_dim * 3)
+        self.c_proj = nn.Linear(n_dim, n_dim)
+        self.attn_drop = nn.Dropout(config.attn_pdrop)
+        self.resid_drop = nn.Dropout(config.resid_pdrop)
+        m_len = config.max_len
+        self.register_buffer("bias", torch.tril(torch.ones(m_len, m_len)).view(1, 1, m_len, m_len))
+        self.n_head = config.n_head
+
+    def forward(self, x):
+        B, T, C = x.shape
+        nh = self.n_head
+        hs = C // nh
+
+        q, k, v = self.c_attn(x).split(C, dim=-1)
+        q = q.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+        k = k.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+        v = v.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
+
+        att = q @ k.transpose(2, 3) * 1.0 / math.sqrt(hs)
+        att = att.masked_fill(self.bias == 0, float("-inf"))
+        att = F.softmax(att)
+        att = self.attn_drop(att)
+
+        y = att @ v
+        y = y.transpose(1, 2).view(B, T, C)
+        y = self.c_proj(y)
+        y = self.resid_drop(y)
+        return y
+
+
+class Block(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        n_dim = config.n_dim
+        self.ln1 = nn.LayerNorm(n_dim)
+        self.attn = CausalSelfAttention(config)
+        self.ln2 = nn.LayerNorm(n_dim)
+        self.mlp = nn.ModuleDict(dict(
+            c_fc=nn.Linear(n_dim, n_dim * 4),
+            act=nn.GELU(),
+            c_proj=nn.Linear(n_dim * 4, n_dim),
+            drop=nn.Dropout(config.resid_pdrop)
+        ))
+        m = self.mlp
+        self.mlpf = lambda x: m.drop(m.c_proj(m.act(m.c_fc(x))))
+
+    def forward(self, x):
+        x = x + self.attn(self.ln1(x))
+        x = x + self.mlpf(self.ln2(x))
+        return x
+
+
+class GPT(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transformer = nn.ModuleDict(dict(
+            wte=nn.Embedding(config.vocab_size, config.n_dim),
+            wpe=nn.Embedding(config.max_len, config.n_dim),
+            drop=nn.Dropout(config.embd_pdrop),
+            h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
+            ln=nn.LayerNorm(config.n_dim),
+        ))
+        self.lm_head = nn.Linear(config.n_dim, config.vocab_size)
+        self.max_len = config.max_len
+
+    def forward(self, idx, targets):
+        device = idx.device
+        pos = torch.arange(0, self.max_len, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
+        wte = self.transformer.wte(idx)
+        wpe = self.transformer.wpe(pos)
+        x = self.transformer.drop(wte + wpe)
+        for block in self.transformer.h:
+            x = block(x)
+        x = self.transformer.ln(x)
+        logits = self.lm_head(x)
+        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
+
+
+def QuickSort(nums):
+    if len(nums) <= 1:
+        return nums
+    llist, mlist, rlist, key = [], [], [], nums[0]  # 取 index 0 为 key
+    mlist.append(key)
+    for i in range(1, len(nums)):
+        num = nums[i]
+        if num < key:
+            llist.append(num)
+        elif num > key:
+            rlist.append(num)
+        else:
+            mlist.append(num)
+    return QuickSort(llist) + mlist + QuickSort(rlist)
+
+
+nums = np.random.randint(0, 100, (10,)).tolist()
+
+
+# print(nums)
+
+
+# print(QuickSort(nums))
+
+
+def QuickSortInplace(left, right):
+    if left >= right:
+        return nums
+    l, r, key = left, right, nums[left]
+    while (l < r):
+        while (l < r) and nums[r] >= key:
+            r -= 1
+        nums[l] = nums[r]
+        while (l < r) and nums[l] < key:
+            l += 1
+        nums[r] = nums[l]
+    nums[l] = key
+    QuickSortInplace(left, l - 1)
+    QuickSortInplace(l + 1, right)
+
+
+# QuickSortInplace(0, len(nums) - 1)
+# print(nums)
+
+
+def BubbleSort(nums):
+    if len(nums) <= 1:
+        return nums
+    for i in range(len(nums) - 1, 0, -1):
+        flag = False
+        for j in range(i):
+            if nums[j] > nums[j + 1]:
+                nums[j], nums[j + 1] = nums[j + 1], nums[j]
+                flag = True
+        if not flag:
+            break
+    return nums
+
+
+# print(BubbleSort(nums))
+
+def BinarySearch(nums, num):
+    l, r = 0, len(nums) - 1
+    while (l < r):
+        mid = (l + r + 1) // 2
+        print(l, mid, r)
+        if num > nums[mid]:
+            l = mid
+        elif num < nums[mid]:
+            r = mid - 1
+        else:
+            l = mid
+            break
+    return l
+
+
+nums = list(range(0, 10, 2))
+
+print(nums)
+print(BinarySearch(nums, 5))
+
+
+def edit_distance(word1, word2):
+    m, n = len(word1), len(word2)
+    dp = [[0 for _ in range(n + 1)] for _ in range(m + 1)]
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            dp[i][j] = min(
+                dp[i - 1][j - 1] + (0 if word1[i - 1] == word2[j - 1] else 1),
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1
+            )
+    return dp[m][n]
+
+
+# print(edit_distance("word1", "wo1rd122"))
+
+
+n = 6
+bag_weight = 10
+w = [2, 2, 3, 1, 5, 2]
+v = [2, 3, 1, 5, 4, 3]
+
+
+# value = fun(n, bag_weight, w, v)
+# show(n, bag_weight, w, value)
+
+
+def bag(n, bag_weight, w, v):
+    value = np.zeros((n + 1, bag_weight + 1))
+    for i in range(1, n + 1):
+        for j in range(1, bag_weight + 1):
+            value[i][j] = value[i - 1][j]  # default
+            if j >= w[i - 1]:
+                value[i][j] = max(value[i - 1][j], value[i - 1][j - w[i - 1]] + v[i - 1])
+                print(value)
+
+    things = []
+    j = bag_weight
+    for i in range(n, 0, -1):
+        if value[i][j] > value[i - 1][j]:
+            things.append(i - 1)
+            j -= w[i - 1]
+    return value[n][bag_weight], things
+
+
+# print(bag(n, bag_weight, w, v))
+
+
+def partition(seq):
+    pi, seq = seq[0], seq[1:]  # 选取并移除主元
+    lo = [x for x in seq if x <= pi]  # 选出小于第一个数的所有元素
+    hi = [x for x in seq if x > pi]  ##选出大于第一个数的所有元素
+    return lo, pi, hi
+
+
+def select(seq, k):
+    lo, pi, hi = partition(seq)
+    m = len(lo)  # 小于第一个数的元素有几个
+    if m == k: return pi
+    if m < k: return select(hi, k - m - 1)
+    return select(lo, k)
+
+
+seq = (1, 2, 3, 4, 5)
+
+
+# print(partition(seq))
+# print(select(seq, 3))
+
+
+def MergeSort(nums):
+    if len(nums) <= 1:
+        return nums
+    mid = len(nums) // 2
+    llist, rlist = MergeSort(nums[:mid]), MergeSort(nums[mid:])
+    res = []
+    i, j = 0, 0
+    while i < len(llist) and j < len(rlist):
+        if llist[i] < rlist[j]:
+            res.append(llist[i])
+            i += 1
+        else:
+            res.append(rlist[j])
+            j += 1
+    res += llist[i:] + rlist[j:]
+    return res
+
+
+nums = np.random.randint(0, 20, (10,)).tolist()
+print(nums)
+print(MergeSort(nums))
+
+nums = np.random.randint(0, 100, (10,)).tolist()
+print(nums)
+
+
+def Heapify(start, end):
+    father = start
+    son = father * 2 + 1
+    while (son <= end):
+        if (son + 1) <= end and nums[son + 1] < nums[son]:
+            son += 1
+        if nums[father] > nums[son]:
+            nums[father], nums[son] = nums[son], nums[father]
+            father = son
+            son = father * 2 + 1
+        else:
+            return
+
+
+def HeapInit():
+    for i in range((len(nums) - 1) // 2, -1, -1):
+        Heapify(i, len(nums) - 1)
+
+
+def HeapSort():
+    topk = 5
+    for i in range(len(nums) - 1, 0, -1):
+        nums[i], nums[0] = nums[0], nums[i]
+        if i + topk == len(nums):
+            break
+        Heapify(0, i - 1)
+
+
+HeapInit()
+HeapSort()
+print(nums)
+
+nums = np.random.randint(0, 20, (9,)).tolist()
+print(nums)
+
+
+def quickSelect(nums, k):
+    '''
+
+    :param nums:
+    :param k:
+    :return: klist, rlist
+    '''
+    llist, mlist, rlist = [], [], []
+
+    if k <= 0 or len(nums) <= 0:
+        return llist, mlist, rlist
+
+    pivot = nums[random.randint(0, len(nums) - 1)]
+    for i, n in enumerate(nums):
+        if n < pivot:
+            llist.append(n)
+        elif n == pivot:
+            mlist.append(n)
+        else:
+            rlist.append(n)
+
+    if k <= len(rlist):
+        _llist, _mlist, _rlist = quickSelect(rlist, k)
+        return llist + mlist + _llist, _mlist, _rlist
+    elif k <= len(rlist + mlist):
+        return llist, mlist, rlist
+    else:
+        _llist, _mlist, _rlist = quickSelect(llist, k - len(rlist + mlist))
+        return _llist, _mlist, _rlist + mlist + rlist
+
+
+print(sorted(nums))
+print(quickSelect(nums, 4))
+
+
+def wiggleSort(nums):
+    # nums.sort()
+    mid_i = (len(nums) + 1) // 2
+    llist, mlist, rlist = quickSelect(nums, mid_i)
+    print(llist, mlist, rlist)
+    nums[::2], nums[1::2] = (llist + mlist)[:mid_i], (llist + mlist + rlist)[mid_i:]
+    return nums
+
+
+print(wiggleSort(nums))
+
+
+def minWindow(self, s: str, t: str) -> str:
+    need = collections.defaultdict(int)
+    for c in t:
+        need[c] += 1
+    needCnt = len(t)
+    i = 0
+    res = (0, float('inf'))
+    for j, c in enumerate(s):
+        if need[c] > 0:
+            needCnt -= 1
+        need[c] -= 1
+        if needCnt == 0:  # 步骤一：滑动窗口包含了所有T元素
+            while True:  # 步骤二：增加i，排除多余元素
+                c = s[i]
+                if need[c] == 0:
+                    break
+                need[c] += 1
+                i += 1
+            if j - i < res[1] - res[0]:  # 记录结果
+                res = (i, j)
+            need[s[i]] += 1  # 步骤三：i增加一个位置，寻找新的满足条件滑动窗口
+            needCnt += 1
+            i += 1
+    return '' if res[1] > len(s) else s[res[0]:res[1] + 1]  # 如果res始终没被更新过，代表无满足条件的结果
+
+
+"""
+# self_attention
+q.shape = B,nh,T,hs
+k.shape = B,nh,hs,T
+att = q @ k # B,nh,T,T
+v.shape = B,nh,T,hs
+v = att @ v
+
+"""
+
+"""
+# transformer
+# emb
+wte
+wpe
+drop1(wte + wpe)
+
+# enc
+x = emb(x)
+
+_x = x
+x = self_attention(q=x, k=x, v=x)
+x = drop1(x)
+x = ln1(x + _x)
+
+_x = x
+x = ffn(x)
+x = drop2(x)
+x = ln2(x + _x)
+
+# dec
+dec = emb(x)
+
+_x = dec
+x = self_attention(q=dec, k=dec, v=dec)
+x = drop1(x)
+x = ln1(x + _x)
+
+_x = x
+x = enc_dec_attention(q=x, k=enc, v=enc)
+x = drop2(x)
+x = ln2(x + _x)
+
+_x = x
+x = ffn(x)
+x = drop3(x)
+x = ln3(x + _x)
+
+# lm_head
+
+"""
+
+"""
+# lora
+input x, columns
+weight rows, columns
+lora_right columns, lora_dim
+lora_left lora_dim, rows
+
+input @ lora_right @ lora_left
+
+"""
+
+"""
+# bert
+# emb
+drop(wte + wpe + wse)
+
+# enc
+x = ln1(x)
+x = self_attention(x)
+x = x + drop1(x)
+
+x = ln2(x)
+x = ffn(x)
+x = x + drop2(x)
+
+"""
+
+"""
+# GPT2
+
+# CasaulSelfAttention
+q B,nh,T,hs
+k B,nh,hs,T
+v B,nh,T,hs
+att = q @ k / math.sqrt(hs)
+att = att.masked_fill(bias == 0, float("-inf"))
+att = soft_max(att)
+att = drop(att)
+y = att @ v
+y = y.transpose(1,2).view(B,T,C)
+y = c_proj(y)
+y = resid_drop(y)
+
+# Block
+x = x + attn(ln1(x))
+x = x + mlpf(ln2(x))
+
+# GPT
+x = wte(x) + wpe(pos)
+x = drop(x)
+for x = block(x)
+x = ln(x)
+logits = lm_head(x)
+loss = cross_entrophy(logits, targets)
+
+"""
+
+"""
+# sgd with momentum
+beta = 0.9
+m_t = beta * m_t_old + (1 - beta) * g_t
+
+# adam
+beta1 = 0.9
+m_t = beta1 * m_t_old + (1 - beta1) * g_t
+beta2 = 0.99
+v_t = beta2 * v_t_old + (1 - beta2) * g_t**2
+
+eta = alpha * m_t / v_t**0.5
+
+w_t_new = w_t - eta
+
+"""
+
+"""
+f1 = 2 * acc * rec / (acc + rec)
+
+acc = common / candi
+recall = common / target
+
+"""
+
+"""
+# dropout
+
+mask = (torch.rand(x.shape) > dropout).float() 
+x = mask * x / (1.0 - dropout)
+
+"""
+
+"""
+# lstm
+
+f_t = sigmoid(w_f * cat(h_t_old, x_t) + b_f) # forget
+i_t = sigmoid(w_i * cat(h_t_old, x_t) + b_i) # input
+o_t = sigmoid(w_o * cat(h_t_old, x_t) + b_o) # output
+
+c_h_t = tanh(w_c * cat(h_t_old, x_t) + b_c)
+
+c_t = f_t * c_t_old + i_t * c_h_t
+
+h_t = o_t * tanh(c_t)
+
+"""
+
+"""
+# gru
+
+r = sigmoid(w_r * cat(h_t_old, x_t)) # reset
+z = sigmoid(w_z * cat(h_t_old, x_t)) # update
+
+h_h_t_1 = h_t_1 * r
+h_h = tanh(w * cat(h_h_t_1, x_t))
+h_t = (1 - z) * h_t_1 + z * h_h
+
+"""
+
+"""
+# llama
+not ln, RMSNorm
+SwiGLU
+Rotary Embeddings：引入RoPE
+
+"""
+
+"""
+# bloom
+alibi
+
+"""
+
+"""
+# muti_head
+
+mul_64 = 64 * 1024 * 128 * 128
+mul_1 = 1 * 1024 * 8192 * 8192
+
+多头学到不同维度的东西
+提升训练效率
+
+注意力稀疏？
+
+"""
+
+"""
+
+L1正则化使得权重w往0靠，使网络中的权重尽可能为0，也就相当于减小了网络复杂度，防止过拟合。
+这也就是L1正则化会产生更稀疏（sparse）的解的原因。此处稀疏性指的是最优值中的一些参数为0。L1正则化的稀疏性质已经被广泛地应用于特征选择机制，从可用的特征子集中选择出有意义的特征。
+
+因此在梯度下降过程中，权重 w 将逐渐减小，趋向于0但不等于0。这也就是权重衰减（weight decay）的由来。
+L2正则化起到使得权重参数 w 变小的效果，为什么能防止过拟合呢？因为更小的权重参数 w 意味着模型的复杂度更低，对训练数据的拟合刚刚好，不会过分拟合训练数据，从而提高模型的泛化能力。
+
+"""
+
+"""
+# tf-idf
+
+x term, y document
+tf = freq of x in y
+
+df_x = num of doc include x
+N = total num of doc
+idf = log(N / df_x)
+tf * idf
+
+"""
+
+"""
+# fasttext
+
+字符级 3-gram，有点类似 bpe
+
+"""
+
+"""
+
+向量长度等于向量和自己的点积的开方
+
+cos = np.dot(a, b) / (len(a) * len(b))
+
+"""
+
+"""
+对比学习 simCLR
+x = emb(x)
+x = enc(x)
+x = mlp(x)
+
+infoNCE loss
+
+loss = - log(exp(sim(x_i, x_j) / t) / sum(sim(x_i, x_j) / t))
+
+"""
+
+"""
+CLIP
+
+# image_encoder - Reset or Vision Transformer
+# text_encoder - CBOW or Text Transformer
+# IIn, h, w, cJ - minibatch of aligned images
+# TIn, l] - minibatch of aligned texts
+# W_ild_i, del- learned proj of image to embed
+# W_tld_t, del - learned proj of text to embed
+# t - learned temperature parameter
+# extract feature representations of each modality
+
+# 分别提取图像特征和文本特征
+I_f = image_encoder(I) #[n, d_i]
+T_f = text_encoder(T) #[n, d_t]
+
+# 对两个特征进行线性投射，得到相同维度的特征，并进行l2归一化
+I_e = l2_normalize(np.dot(I_f, W_i), axis=1)
+T_e = l2_normalize(np.dot(T_f, W_t), axis=1)
+
+# 计算缩放的余弦相似度：[n, n]
+logits = np.dot(I_e, T_e.T) * np.exp(t)
+
+# 对称的对比学习损失：等价于N个类别的cross_entropy_loss
+labels = np.arange(n) # 对角线元素的labels
+loss_i = cross_entropy_loss(logits, labels, axis=0)
+loss_t = cross_entropy_loss(logits, labels, axis=1)
+loss = (loss_i + loss_t)/2
+
+
+"""
+
+"""
+softmax temperature
+
+def softmax(vec, temperature):
+    '''
+    turn vec into normalized probability
+    '''
+    sum_exp = sum(math.exp(x/temperature) for x in vec)
+    return [math.exp(x/temperature)/sum_exp for x in vec]
+
+"""
+
+"""
+pytorch 训练流程
+
+加载数据。 如果已完成本教程的上一步，则已经完成了数据加载。
+1.定义模型。
+2.定义损失函数。
+使用训练数据训练模型。
+使用测试数据测试网络。
+
+# Loading the Data
+df = pd.read_excel(r'C:…\Iris_dataset.xlsx') 
+print('Take a look at sample from the dataset:') 
+print(df.head()) 
+
+# Let's verify if our data is balanced and what types of species we have  
+print('\nOur dataset is balanced and has the following values to predict:') 
+print(df['Iris_Type'].value_counts())
+
+# Convert Iris species into numeric types: Iris-setosa=0, Iris-versicolor=1, Iris-virginica=2.  
+labels = {'Iris-setosa':0, 'Iris-versicolor':1, 'Iris-virginica':2} 
+df['IrisType_num'] = df['Iris_Type']   # Create a new column "IrisType_num" 
+df.IrisType_num = [labels[item] for item in df.IrisType_num]  # Convert the values to numeric ones 
+
+# Define input and output datasets 
+input = df.iloc[:, 1:-2]            # We drop the first column and the two last ones. 
+print('\nInput values are:') 
+print(input.head())   
+output = df.loc[:, 'IrisType_num']   # Output Y is the last column  
+print('\nThe output value is:') 
+print(output.head())
+
+
+# Convert Input and Output data to Tensors and create a TensorDataset 
+input = torch.Tensor(input.to_numpy())      # Create tensor of type torch.float32 
+print('\nInput format: ', input.shape, input.dtype)     # Input format: torch.Size([150, 4]) torch.float32 
+output = torch.tensor(output.to_numpy())        # Create tensor type torch.int64  
+print('Output format: ', output.shape, output.dtype)  # Output format: torch.Size([150]) torch.int64 
+data = TensorDataset(input, output)    # Create a torch.utils.data.TensorDataset object for further data manipulation
+
+
+# Split to Train, Validate and Test sets using random_split 
+train_batch_size = 10        
+number_rows = len(input)    # The size of our dataset or the number of rows in excel table.  
+test_split = int(number_rows*0.3)  
+validate_split = int(number_rows*0.2) 
+train_split = number_rows - test_split - validate_split     
+train_set, validate_set, test_set = random_split( 
+    data, [train_split, validate_split, test_split])    
+ 
+# Create Dataloader to read the data within batch sizes and put into memory. 
+train_loader = DataLoader(train_set, batch_size = train_batch_size, shuffle = True) 
+validate_loader = DataLoader(validate_set, batch_size = 1) 
+test_loader = DataLoader(test_set, batch_size = 1)
+
+
+# Define the loss function with Classification Cross-Entropy loss and an optimizer with Adam optimizer
+loss_fn = nn.CrossEntropyLoss()
+optimizer = Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
+
+# Training Function 
+def train(num_epochs): 
+    best_accuracy = 0.0 
+     
+    print("Begin training...") 
+    for epoch in range(1, num_epochs+1): 
+        running_train_loss = 0.0 
+        running_accuracy = 0.0 
+        running_vall_loss = 0.0 
+        total = 0 
+ 
+        # Training Loop 
+        for data in train_loader: 
+        #for data in enumerate(train_loader, 0): 
+            inputs, outputs = data  # get the input and real species as outputs; data is a list of [inputs, outputs] 
+            optimizer.zero_grad()   # zero the parameter gradients          
+            predicted_outputs = model(inputs)   # predict output from the model 
+            train_loss = loss_fn(predicted_outputs, outputs)   # calculate loss for the predicted output  
+            train_loss.backward()   # backpropagate the loss 
+            optimizer.step()        # adjust parameters based on the calculated gradients 
+            running_train_loss +=train_loss.item()  # track the loss value 
+ 
+        # Calculate training loss value 
+        train_loss_value = running_train_loss/len(train_loader) 
+ 
+        # Validation Loop 
+        with torch.no_grad(): 
+            model.eval() 
+            for data in validate_loader: 
+               inputs, outputs = data 
+               predicted_outputs = model(inputs) 
+               val_loss = loss_fn(predicted_outputs, outputs) 
+             
+               # The label with the highest value will be our prediction 
+               _, predicted = torch.max(predicted_outputs, 1) 
+               running_vall_loss += val_loss.item()  
+               total += outputs.size(0) 
+               running_accuracy += (predicted == outputs).sum().item() 
+ 
+        # Calculate validation loss value 
+        val_loss_value = running_vall_loss/len(validate_loader) 
+                
+        # Calculate accuracy as the number of correct predictions in the validation batch divided by the total number of predictions done.  
+        accuracy = (100 * running_accuracy / total)     
+ 
+        # Save the model if the accuracy is the best 
+        if accuracy > best_accuracy: 
+            saveModel() 
+            best_accuracy = accuracy 
+         
+        # Print the statistics of the epoch 
+        print('Completed training batch', epoch, 'Training Loss is: %.4f' %train_loss_value, 'Validation Loss is: %.4f' %val_loss_value, 'Accuracy is %d %%' % (accuracy))
+
+'''
+https://stackoverflow.com/questions/53975717/pytorch-connection-between-loss-backward-and-optimizer-step
+
+Recall that when initializing optimizer you explicitly tell it what parameters (tensors) of the model it should be updating. 
+The gradients are "stored" by the tensors themselves (they have a grad and a requires_grad attributes) once you call backward() on the loss. 
+After computing the gradients for all tensors in the model, calling optimizer.step() makes the optimizer iterate over all parameters (tensors) it is supposed to update and use their internally stored grad to update their values.
+'''
+
+"""
+
+"""
+
+huggingface 训练流程
+
+
+"""
