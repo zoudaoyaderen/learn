@@ -93,89 +93,6 @@ class GPT(nn.Module):
         return logits, loss
 
 
-class CausalSelfAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        n_dim = config.n_dim
-        self.c_attn = nn.Linear(n_dim, n_dim * 3)
-        self.c_proj = nn.Linear(n_dim, n_dim)
-        self.attn_drop = nn.Dropout(config.attn_pdrop)
-        self.resid_drop = nn.Dropout(config.resid_pdrop)
-        m_len = config.max_len
-        self.register_buffer("bias", torch.tril(torch.ones(m_len, m_len)).view(1, 1, m_len, m_len))
-        self.n_head = config.n_head
-
-    def forward(self, x):
-        B, T, C = x.shape
-        nh = self.n_head
-        hs = C // nh
-
-        q, k, v = self.c_attn(x).split(C, dim=-1)
-        q = q.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
-        k = k.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
-        v = v.view(B, T, nh, hs).transpose(1, 2)  # (B, nh, T, hs)
-
-        att = q @ k.transpose(2, 3) * 1.0 / math.sqrt(hs)
-        att = att.masked_fill(self.bias == 0, float("-inf"))
-        att = F.softmax(att)
-        att = self.attn_drop(att)
-
-        y = att @ v
-        y = y.transpose(1, 2).view(B, T, C)
-        y = self.c_proj(y)
-        y = self.resid_drop(y)
-        return y
-
-
-class Block(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        n_dim = config.n_dim
-        self.ln1 = nn.LayerNorm(n_dim)
-        self.attn = CausalSelfAttention(config)
-        self.ln2 = nn.LayerNorm(n_dim)
-        self.mlp = nn.ModuleDict(dict(
-            c_fc=nn.Linear(n_dim, n_dim * 4),
-            act=nn.GELU(),
-            c_proj=nn.Linear(n_dim * 4, n_dim),
-            drop=nn.Dropout(config.resid_pdrop)
-        ))
-        m = self.mlp
-        self.mlpf = lambda x: m.drop(m.c_proj(m.act(m.c_fc(x))))
-
-    def forward(self, x):
-        x = x + self.attn(self.ln1(x))
-        x = x + self.mlpf(self.ln2(x))
-        return x
-
-
-class GPT(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transformer = nn.ModuleDict(dict(
-            wte=nn.Embedding(config.vocab_size, config.n_dim),
-            wpe=nn.Embedding(config.max_len, config.n_dim),
-            drop=nn.Dropout(config.embd_pdrop),
-            h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-            ln=nn.LayerNorm(config.n_dim),
-        ))
-        self.lm_head = nn.Linear(config.n_dim, config.vocab_size)
-        self.max_len = config.max_len
-
-    def forward(self, idx, targets):
-        device = idx.device
-        pos = torch.arange(0, self.max_len, dtype=torch.long, device=device).unsqueeze(0)  # (1, T)
-        wte = self.transformer.wte(idx)
-        wpe = self.transformer.wpe(pos)
-        x = self.transformer.drop(wte + wpe)
-        for block in self.transformer.h:
-            x = block(x)
-        x = self.transformer.ln(x)
-        logits = self.lm_head(x)
-        loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
-        return logits, loss
-
-
 def QuickSort(nums):
     if len(nums) <= 1:
         return nums
@@ -350,8 +267,8 @@ def MergeSort(nums):
 
 
 nums = np.random.randint(0, 20, (10,)).tolist()
-print(nums)
-print(MergeSort(nums))
+# print(nums)
+# print(MergeSort(nums))
 
 nums = np.random.randint(0, 100, (10,)).tolist()
 print(nums)
@@ -880,7 +797,15 @@ After computing the gradients for all tensors in the model, calling optimizer.st
 
 """
 
-huggingface 训练流程
+bert 和 ELMo 区别
+bert 用的 transformer ELMo 用的 LSTM
 
+[MASK] 屏蔽 15% 的 token，只训练 [MASK] token
+预训练和finetuning之间不匹配，因为在finetuning期间从未看到[MASK]token，未解决这个问题，有以下操作
+80％的时间：用[MASK]标记替换单词，例如，my dog is hairy → my dog is [MASK]
+10％的时间：用一个随机的单词替换该单词，例如，my dog is hairy → my dog is apple
+10％的时间：保持单词不变，例如，my dog is hairy → my dog is hairy. 这样做的目的是将表示偏向于实际观察到的单词。
+
+CLS]是用于分类输出的特殊符号，也是 next sentence 的训练 token
 
 """
