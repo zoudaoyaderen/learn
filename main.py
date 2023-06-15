@@ -435,7 +435,72 @@ def longestPalindrome(s):
     return s[begin:begin + max_len]
 
 
-print(longestPalindrome('saaasgds'))
+# print(longestPalindrome('saaasgds'))
+
+def decodeString(s):
+    # s = "3[a2[c]]"
+    stack, res, multi = [], "", 0
+    for i in s:
+        if i == "[":
+            stack.append((multi, res))
+            multi, res = 0, ""
+        elif i == "]":
+            current_multi, last_res = stack.pop()
+            res = last_res + current_multi * res
+        elif "0" <= i <= "9":
+            multi = multi * 10 + int(i)
+        else:
+            res += i
+    return res
+
+
+# print(decodeString("3[a2[c]]"))
+
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+
+def sortList(head: ListNode) -> ListNode:
+    if not head or not head.next:
+        return head
+    # cut
+    slow, fast = head, head.next
+    while fast and fast.next:
+        slow, fast = slow.next, fast.next.next
+    mid, slow.next = slow.next, None
+    # merge
+    left, right = sortList(head), sortList(mid)
+    res = h = ListNode(0)
+    while left and right:
+        if left.val <= right.val:
+            h.next, left = left, left.next
+        else:
+            h.next, right = right, right.next
+        h = h.next
+    h.next = left if left else right
+    return res.next
+
+
+# nums = np.random.randint(0, 10, (5,))
+# print(nums)
+#
+# node = None
+# n_node = None
+# for i in nums:
+#     if not node:
+#         node = ListNode(i)
+#     else:
+#         n_node = ListNode(i)
+#         n_node.next = node
+#         node = n_node
+#
+# print(n_node.val, n_node.next.val)
+#
+# res = sortList(n_node)
+# print(res.val, res.next)
+# print(res.val, res.next.val)
 
 """
 # self_attention
