@@ -502,6 +502,20 @@ def sortList(head: ListNode) -> ListNode:
 # print(res.val, res.next)
 # print(res.val, res.next.val)
 
+
+def maxProfit(nums):
+    min_price = float("inf")
+    max_profit = -float("inf")
+    for i in nums:
+        min_price = min(i, min_price)
+        max_profit = max(max_profit, i - min_price)
+    return max_profit
+
+
+# nums = np.random.randint(1, 10, (5,))
+# print(nums)
+# print(maxProfit(nums))
+
 """
 # self_attention
 q.shape = B,nh,T,hs
