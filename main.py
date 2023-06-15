@@ -662,6 +662,49 @@ def numIslands(grid):
     return num_islands
 
 
+def quickSelect(nums, k):
+    l, m, r, p = [], [], [], nums[0]
+    for n in nums:
+        if n < p:
+            l.append(n)
+        elif n == p:
+            m.append(n)
+        else:
+            r.append(n)
+
+    if k <= len(r):
+        return quickSelect(r, k)
+    elif len(r) < k <= len(m + r):
+        return m[0]
+    else:
+        return quickSelect(l, k - len(m + r))
+
+
+def quickSelectPoint(nums, k):
+    n = len(nums)
+    l, r = 0, n - 1
+    p = nums[l]
+    while l < r:
+        while (l < r) and (nums[r] >= p):
+            r -= 1
+        nums[l] = nums[r]
+        while (l < r) and (nums[l] < p):
+            l += 1
+        nums[r] = nums[l]
+
+    nums[l] = p
+    if k <= n - l - 1:
+        return quickSelectPoint(nums[l + 1:], k)
+    elif k == n - l:
+        return p
+    else:
+        return quickSelectPoint(nums[:l], k - n + l)
+
+
+# nums = np.random.randint(0, 20, (10,)).tolist()
+# print(sorted(nums))
+# print(quickSelectPoint(nums, 3))
+
 """
 # self_attention
 q.shape = B,nh,T,hs
