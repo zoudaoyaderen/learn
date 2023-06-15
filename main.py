@@ -561,6 +561,40 @@ def noRepeatLongestSubString(s):
 
 # print(noRepeatLongestSubString("fdsfs"))
 
+
+def calculate(s):
+    sign, ops = 1, [1]
+
+    i = 0
+    n = len(s)
+    ret = 0
+    while i < n:
+        _s = s[i]
+        if _s == " ":
+            i += 1
+        elif _s == "+":
+            sign = ops[-1]
+            i += 1
+        elif _s == "-":
+            sign = -ops[-1]
+            i += 1
+        elif _s == "(":
+            ops.append(sign)
+            i += 1
+        elif _s == ")":
+            ops.pop()
+            i += 1
+        else:
+            num = 0
+            while i < n and s[i].isdigit():
+                num = num * 10 + int(s[i])
+                i += 1
+            ret += num * sign
+    return ret
+
+
+# print(calculate("1 + (3 - 5)"))
+
 """
 # self_attention
 q.shape = B,nh,T,hs
