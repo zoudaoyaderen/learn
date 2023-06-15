@@ -156,24 +156,22 @@ def BubbleSort(nums):
 
 def BinarySearch(nums, num):
     l, r = 0, len(nums) - 1
-    while (l < r):
+    while (l <= r):
         mid = (l + r + 1) // 2
-        print(l, mid, r)
+        # print(l, mid, r)
         if num > nums[mid]:
-            l = mid
+            l = mid + 1
         elif num < nums[mid]:
             r = mid - 1
         else:
-            l = mid
-            break
-    return l
+            return mid
+    return -1
 
 
-nums = list(range(0, 10, 2))
-
-
+# nums = list(range(0, 10, 2))
+#
 # print(nums)
-# print(BinarySearch(nums, 5))
+# print(BinarySearch(nums, 4))
 
 
 def edit_distance(word1, word2):
@@ -699,6 +697,25 @@ def quickSelectPoint(nums, k):
         return p
     else:
         return quickSelectPoint(nums[:l], k - n + l)
+
+
+def searchRotated(nums, target):
+    l, r = 0, len(nums) - 1
+    while l < r:
+        mid = (l + r + 1) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[l] < nums[mid]:
+            if nums[l] <= target < nums[mid]:
+                r = mid - 1
+            else:
+                l = mid + 1
+        else:
+            if nums[mid] <= target <= nums[r]:
+                l = mid + 1
+            else:
+                r = mid - 1
+    return -1
 
 
 # nums = np.random.randint(0, 20, (10,)).tolist()
