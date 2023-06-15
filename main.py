@@ -621,6 +621,24 @@ def LCS(word1, word2):
 
 # print(LCS("fdsaord1", "word24434"))
 
+def reorderList(head: ListNode) -> None:
+    vec = []
+    node = head
+    while node:
+        vec.append(node)
+        node = node.next
+
+    i, j = 0, len(vec) - 1
+    while i < j:
+        vec[i].next = vec[j]
+        i += 1
+        if i == j:
+            break
+        vec[j].next = vec[i]
+        j -= 1
+    vec[i].next = None
+
+
 """
 # self_attention
 q.shape = B,nh,T,hs
