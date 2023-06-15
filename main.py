@@ -540,6 +540,27 @@ def merge(nums1, nums2, m, n):
 # merge(nums1, nums2, 3, 2)
 # print(nums1)
 
+def noRepeatLongestSubString(s):
+    n = len(s)
+    res = ""
+    res_len = 0
+    r = -1
+    occur = set()
+    for l in range(n):
+        if l > 0:
+            occur.remove(s[l - 1])
+        while r + 1 < n and s[r + 1] not in occur:
+            occur.add(s[r + 1])
+            r += 1
+        if r - l + 1 > res_len:
+            res_len = r - l + 1
+            res = s[l:r + 1]
+    print(res)
+    return res_len
+
+
+# print(noRepeatLongestSubString("fdsfs"))
+
 """
 # self_attention
 q.shape = B,nh,T,hs
