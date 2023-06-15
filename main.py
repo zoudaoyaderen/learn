@@ -595,6 +595,32 @@ def calculate(s):
 
 # print(calculate("1 + (3 - 5)"))
 
+def LCS(word1, word2):
+    m, n = len(word1), len(word2)
+    dp = np.zeros((m + 1, n + 1))
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if word1[i - 1] == word2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+            # print(dp)
+    word = ""
+    i, j = m, n
+    while i > 0 and j > 0:
+        if word1[i - 1] == word2[j - 1]:
+            word += word1[i - 1]
+            i -= 1
+            j -= 1
+        elif dp[i][j] == dp[i - 1][j]:
+            i -= 1
+        else:
+            j -= 1
+    return dp[m][n], word[::-1]
+
+
+# print(LCS("fdsaord1", "word24434"))
+
 """
 # self_attention
 q.shape = B,nh,T,hs
