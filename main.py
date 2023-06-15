@@ -516,6 +516,30 @@ def maxProfit(nums):
 # print(nums)
 # print(maxProfit(nums))
 
+def merge(nums1, nums2, m, n):
+    p1, p2 = m - 1, n - 1
+    tail = m + n - 1
+    while p1 >= 0 or p2 >= 0:
+        if p1 == -1:
+            nums1[tail] = nums2[p2]
+            p2 -= 1
+        elif p2 == -1:
+            nums1[tail] = nums1[p1]
+            p1 -= 1
+        elif nums1[p1] > nums2[p2]:
+            nums1[tail] = nums1[p1]
+            p1 -= 1
+        else:
+            nums1[tail] = nums2[p2]
+            p2 -= 1
+        tail -= 1
+
+
+# nums1 = [1, 3, 4, -1, -1]
+# nums2 = [2, 6]
+# merge(nums1, nums2, 3, 2)
+# print(nums1)
+
 """
 # self_attention
 q.shape = B,nh,T,hs
