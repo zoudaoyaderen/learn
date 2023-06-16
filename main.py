@@ -879,8 +879,8 @@ w_t_new = w_t - eta
 
 """
 KL = H(p,q) - H(p)
-H(p) = - p * log(p)
-H(p,q) = - p * log(q)
+H(p) = - sum(p * log(p))
+H(p,q) = - sum(p * log(q))
 
 """
 
