@@ -1070,8 +1070,36 @@ def softmax(vec, temperature):
 """
 
 """
-rw loss
+reward loss
 loss += -torch.log(torch.sigmoid(c_r - r_r)).mean()
+
+"""
+
+"""
+ppo
+
+log_ratio = logprobs - ref_logprobs
+kl_penalty = kl_ctl * -log_ratio
+rewards = kl_penalty[-1] + reward
+values
+
+delta = rewards[:, t] + gamma * nextvalues - values[:, t] # delta 其实就是 advantage
+lastgaelam = delta + gamma * lam * lastgaelam
+return = advantage + value
+
+log_ratio = (logprobs - old_logprobs) * mask
+ratio = torch.exp(log_ratio)
+pg_loss1 = -advantages * ratio
+pg_loss2 = -advantages * torch.clamp(
+    ratio,
+    1.0 - self.cliprange,
+    1.0 + self.cliprange,
+)
+pg_loss = torch.sum(torch.max(pg_loss1, pg_loss2) * mask) / n
+
+vf_loss1 = (values - returns) ** 2
+vf_loss2 = (values_clipped - returns) ** 2
+vf_loss = 0.5 * torch.sum(torch.max(vf_loss1, vf_loss2) * mask) / n
 
 """
 
