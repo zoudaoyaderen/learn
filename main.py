@@ -1070,6 +1070,12 @@ def softmax(vec, temperature):
 """
 
 """
+rw loss
+loss += -torch.log(torch.sigmoid(c_r - r_r)).mean()
+
+"""
+
+"""
 pytorch 训练流程
 
 加载数据。 如果已完成本教程的上一步，则已经完成了数据加载。
