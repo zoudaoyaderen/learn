@@ -425,7 +425,7 @@ def longestPalindrome(s):
                     dp[i][j] = 1
             else:
                 dp[i][j] = 0
-            print(dp)
+            # print(dp)
             if dp[i][j] == 1:
                 max_len = l
                 begin = i
