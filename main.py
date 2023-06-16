@@ -1021,7 +1021,7 @@ x = mlp(x)
 
 infoNCE loss
 
-loss = - log(exp(sim(x_i, x_j) / t) / sum(sim(x_i, x_j) / t))
+loss = - log(exp(sim(x_i, x_j) / t) / exp(sum(sim(x_i, x_j) / t)))
 
 """
 
