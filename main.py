@@ -1208,7 +1208,7 @@ bert 用的 transformer ELMo 用的 LSTM
 10％的时间：用一个随机的单词替换该单词，例如，my dog is hairy → my dog is apple
 10％的时间：保持单词不变，例如，my dog is hairy → my dog is hairy. 这样做的目的是将表示偏向于实际观察到的单词。
 
-CLS]是用于分类输出的特殊符号，也是 next sentence 的训练 token
+[CLS]是用于分类输出的特殊符号，也是 next sentence 的训练 token
 
 """
 
