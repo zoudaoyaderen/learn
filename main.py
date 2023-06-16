@@ -1101,6 +1101,8 @@ vf_loss1 = (values - returns) ** 2
 vf_loss2 = (values_clipped - returns) ** 2
 vf_loss = 0.5 * torch.sum(torch.max(vf_loss1, vf_loss2) * mask) / n
 
+一个 MDP 通常由状态空间、动作空间、状态转移函数、奖励函数、折扣因子等组成。
+
 """
 
 """
