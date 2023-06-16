@@ -896,6 +896,8 @@ x = mask * x / (1.0 - dropout)
 """
 sigmoid = 1 / (1 + exp(-z))
 
+logistics regression 就是用 sigmoid 解决二分类
+
 """
 
 """
