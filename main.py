@@ -890,6 +890,20 @@ f1 = 2 * acc * rec / (acc + rec)
 acc = common / candi
 recall = common / target
 
+bleu 用 acc
+log_avg = (math.log(9 / 9) + math.log(5 / 8) + math.log(2 / 7) + math.log(1 / 6)) / 4
+bp = 1  # l_pred == l_true  bp=1
+print(math.exp(log_avg))  # 0.41535092372063953
+
+rouge 用 rec
+rouge-1 rouge-2 就是 unigram bigram 的 rec
+
+rouge-l 是 LCS 的 f1
+r_lcs = llcs / m
+p_lcs = llcs / n
+
+f_lcs = 2.0 * ((p_lcs * r_lcs) / (p_lcs + r_lcs + 1e-8))
+
 """
 
 """
