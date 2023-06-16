@@ -894,6 +894,11 @@ x = mask * x / (1.0 - dropout)
 """
 
 """
+sigmoid = 1 / (1 + exp(-z))
+
+"""
+
+"""
 # lstm
 
 f_t = sigmoid(w_f * cat(h_t_old, x_t) + b_f) # forget
