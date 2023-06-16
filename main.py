@@ -878,6 +878,13 @@ w_t_new = w_t - eta
 """
 
 """
+KL = H(p,q) - H(p)
+H(p) = - p * log(p)
+H(p,q) = - p * log(q)
+
+"""
+
+"""
 f1 = 2 * acc * rec / (acc + rec)
 
 acc = common / candi
